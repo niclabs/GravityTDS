@@ -20,7 +20,7 @@
 #define EEPROM_write(address, p) {int i = 0; byte *pp = (byte*)&(p);for(; i < sizeof(p); i++) EEPROM.write(address+i, pp[i]);}
 #define EEPROM_read(address, p)  {int i = 0; byte *pp = (byte*)&(p);for(; i < sizeof(p); i++) pp[i]=EEPROM.read(address+i);}
 
-GravityTDS::GravityTDS()
+GravityTDS::GravityTDS(int device)
 {
     this->pin = A1;
     this->temperature = 25.0;
@@ -28,6 +28,7 @@ GravityTDS::GravityTDS()
     this->adcRange = 1024.0;
     this->kValueAddress = 8;
     this->kValue = 1.0;
+    this->mem_offset = device*DEVICE_MEM_OFFSET;
 }
 
 GravityTDS::~GravityTDS()
@@ -96,11 +97,11 @@ float GravityTDS::getEcValue()
 
 void GravityTDS::readKValues()
 {
-    EEPROM_read(this->kValueAddress, this->kValue);  
-    if(EEPROM.read(this->kValueAddress)==0xFF && EEPROM.read(this->kValueAddress+1)==0xFF && EEPROM.read(this->kValueAddress+2)==0xFF && EEPROM.read(this->kValueAddress+3)==0xFF)
+    EEPROM_read(this->kValueAddress+this->mem_offset, this->kValue);  
+    if(EEPROM.read(this->kValueAddress+this->mem_offset)==0xFF && EEPROM.read(this->kValueAddress+1+this->mem_offset)==0xFF && EEPROM.read(this->kValueAddress+2+this->mem_offset)==0xFF && EEPROM.read(this->kValueAddress+3+this->mem_offset)==0xFF)
     {
       this->kValue = 1.0;   // default value: K = 1.0
-      EEPROM_write(this->kValueAddress, this->kValue);
+      EEPROM_write(this->kValueAddress+this->mem_offset, this->kValue);
     }
 }
 
@@ -199,7 +200,7 @@ void GravityTDS::ecCalibration(byte mode)
             Serial.println();
             if(ecCalibrationFinish)
             {
-               EEPROM_write(kValueAddress, kValue);
+               EEPROM_write(kValueAddress+this->mem_offset, kValue);
                Serial.print(F(">>>Calibration Successful,K Value Saved"));
             }
             else Serial.print(F(">>>Calibration Failed"));       
@@ -210,4 +211,8 @@ void GravityTDS::ecCalibration(byte mode)
         }
         break;
     }
+}
+
+void GravityTDS::calibrate() {
+    ecCalibration(1);
 }

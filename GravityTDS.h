@@ -22,10 +22,12 @@
 #define ReceivedBufferLength 15
 #define TdsFactor 0.5  // tds = ec / 2
 
+#define DEVICE_MEM_OFFSET 8
+
 class GravityTDS
 {
 public:
-    GravityTDS();
+    GravityTDS(int device = 0);
     ~GravityTDS();
 
     void begin();  //initialization
@@ -38,6 +40,8 @@ public:
     float getKvalue(); 
     float getTdsValue();
     float getEcValue();
+
+    void calibrate();
 
 private:
     int pin;
@@ -59,6 +63,8 @@ private:
     boolean cmdSerialDataAvailable();
     byte cmdParse();
     void ecCalibration(byte mode);
+
+    int mem_offset;
 };  
 
 #endif
