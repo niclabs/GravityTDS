@@ -31,28 +31,37 @@ public:
     ~GravityTDS();
 
     void begin();  //initialization
-    void update(); //read and calculate
-    void setPin(int pin); 
-    void setTemperature(float temp);  //set the temperature and execute temperature compensation
+    void update(float voltage /* VOLTS */, float temperature=-100);
+    /* // Now update gets raw voltage.
+    void setPin(int pin);
     void setAref(float value);  //reference voltage on ADC, default 5.0V on Arduino UNO
     void setAdcRange(float range);  //1024 for 10bit ADC;4096 for 12bit ADC
+    */
+    void setTemperature(float temp);  //set the temperature and execute temperature compensation
     void setKvalueAddress(int address); //set the EEPROM address to store the k value,default address:0x08
-    float getKvalue(); 
+    float getKvalue();
     float getTdsValue();
     float getEcValue();
 
-    void calibrate();
+    float voltageToEC(float voltage);
+    float compensateTemperature(float ecValue);
+    bool calibrate1413();
+    bool isInRange1413(float ecValue);
+    bool isInRangeKValue(float kValue);
+    void saveKValue(float kValue);
 
 private:
+    /*
     int pin;
     float aref;  // default 5.0V on Arduino UNO
     float adcRange;
+    */
     float temperature;
     int kValueAddress;     //the address of the K value stored in the EEPROM
     char cmdReceivedBuffer[ReceivedBufferLength+1];   // store the serial cmd from the serial monitor
     byte cmdReceivedBufferIndex;
- 
-    float kValue;      // k value of the probe,you can calibrate in buffer solution ,such as 706.5ppm(1413us/cm)@25^C 
+
+    float kValue;      // k value of the probe,you can calibrate in buffer solution ,such as 706.5ppm(1413us/cm)@25^C
     float analogValue;
     float voltage;
     float ecValue; //before temperature compensation
@@ -65,6 +74,6 @@ private:
     void ecCalibration(byte mode);
 
     int mem_offset;
-};  
+};
 
 #endif

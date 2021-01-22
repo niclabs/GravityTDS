@@ -22,197 +22,92 @@
 
 GravityTDS::GravityTDS(int device)
 {
-    this->pin = A1;
+    //this->pin = A1;
+    this->voltage = 0;
     this->temperature = 25.0;
-    this->aref = 5.0;
-    this->adcRange = 1024.0;
+    //this->aref = 5.0;
+    //this->adcRange = 1024.0;
     this->kValueAddress = 8;
     this->kValue = 1.0;
     this->mem_offset = device*DEVICE_MEM_OFFSET;
 }
 
-GravityTDS::~GravityTDS()
-{
+GravityTDS::~GravityTDS() {
 }
 
-void GravityTDS::setPin(int pin)
-{
-	this->pin = pin;
-}
-
-void GravityTDS::setTemperature(float temp)
-{
+void GravityTDS::setTemperature(float temp) {
 	this->temperature = temp;
 }
 
-void GravityTDS::setAref(float value)
-{
-	this->aref = value;
-}
 
-void GravityTDS::setAdcRange(float range)
-{
-      this->adcRange = range;
-}
-
-void GravityTDS::setKvalueAddress(int address)
-{
+void GravityTDS::setKvalueAddress(int address) {
       this->kValueAddress = address;
 }
 
-void GravityTDS::begin()
-{
-	pinMode(this->pin,INPUT);
+void GravityTDS::begin() {
 	readKValues();
 }
 
-float GravityTDS::getKvalue()
-{
+void GravityTDS::update(float voltage /* in Volts */, float temperature) {
+	this->voltage = voltage;
+    if ((*(uint32_t*)&temperature) != 0xc2c80000 /* -100f binary representation in 4-byte floats*/) {
+        this->temperature = temperature;
+    }
+	this->ecValue = voltageToEC(this->voltage);
+	this->ecValue25 = compensateTemperature(this->ecValue); //temperature compensation, returns equivalent EC at 25 °C
+	this->tdsValue = ecValue25 * TdsFactor;
+}
+
+float GravityTDS::getKvalue() {
 	return this->kValue;
 }
 
-void GravityTDS::update()
-{
-	this->analogValue = analogRead(this->pin);
-	this->voltage = this->analogValue/this->adcRange*this->aref;
-	this->ecValue=(133.42*this->voltage*this->voltage*this->voltage - 255.86*this->voltage*this->voltage + 857.39*this->voltage)*this->kValue;
-	this->ecValue25  =  this->ecValue / (1.0+0.02*(this->temperature-25.0));  //temperature compensation
-	this->tdsValue = ecValue25 * TdsFactor;
-	if(cmdSerialDataAvailable() > 0)
-        {
-            ecCalibration(cmdParse());  // if received serial cmd from the serial monitor, enter into the calibration mode
-        }
-}
-
-float GravityTDS::getTdsValue()
-{
+float GravityTDS::getTdsValue() {
 	return tdsValue;
 }
 
-float GravityTDS::getEcValue()
-{
+float GravityTDS::getEcValue() {
       return ecValue25;
 }
 
-
-void GravityTDS::readKValues()
-{
-    EEPROM_read(this->kValueAddress+this->mem_offset, this->kValue);  
-    if(EEPROM.read(this->kValueAddress+this->mem_offset)==0xFF && EEPROM.read(this->kValueAddress+1+this->mem_offset)==0xFF && EEPROM.read(this->kValueAddress+2+this->mem_offset)==0xFF && EEPROM.read(this->kValueAddress+3+this->mem_offset)==0xFF)
-    {
+void GravityTDS::readKValues() {
+    EEPROM_read(this->kValueAddress+this->mem_offset, this->kValue);
+    if(EEPROM.read(this->kValueAddress+this->mem_offset)==0xFF &&
+       EEPROM.read(this->kValueAddress+1+this->mem_offset)==0xFF &&
+       EEPROM.read(this->kValueAddress+2+this->mem_offset)==0xFF &&
+       EEPROM.read(this->kValueAddress+3+this->mem_offset)==0xFF) {
       this->kValue = 1.0;   // default value: K = 1.0
       EEPROM_write(this->kValueAddress+this->mem_offset, this->kValue);
     }
 }
 
-boolean GravityTDS::cmdSerialDataAvailable()
-{
-  char cmdReceivedChar;
-  static unsigned long cmdReceivedTimeOut = millis();
-  while (Serial.available()>0) 
-  {   
-    if (millis() - cmdReceivedTimeOut > 500U) 
-    {
-      cmdReceivedBufferIndex = 0;
-      memset(cmdReceivedBuffer,0,(ReceivedBufferLength+1));
+float GravityTDS::voltageToEC(float voltage /* in Volts */) {
+    return (133.42*voltage*voltage*voltage - 255.86*voltage*voltage + 857.39*voltage)*this->kValue;
+}
+
+bool GravityTDS::isInRange1413(float ecValue) {
+    return (0<ecValue) && (ecValue<2000);
+}
+
+bool GravityTDS::isInRangeKValue(float kValue) {
+    return (0.25<kValue) && (kValue<0.4);
+}
+
+float GravityTDS::compensateTemperature(float ecValue) {
+    return ecValue*(1.0+0.02*(this->temperature-25.0));
+}
+
+bool GravityTDS::calibrate1413() {
+    // to be called after update(voltage, temperature)
+    float KValueTemp = this->ecValue25/(133.42*voltage*voltage*voltage - 255.86*voltage*voltage + 857.39*voltage);
+    if (isInRange1413(ecValue25) && isInRangeKValue(KValueTemp)) {
+        saveKValue(KValueTemp);
+        return true;
     }
-    cmdReceivedTimeOut = millis();
-    cmdReceivedChar = Serial.read();
-    if (cmdReceivedChar == '\n' || cmdReceivedBufferIndex==ReceivedBufferLength){
-		cmdReceivedBufferIndex = 0;
-		strupr(cmdReceivedBuffer);
-		return true;
-    }else{
-      cmdReceivedBuffer[cmdReceivedBufferIndex] = cmdReceivedChar;
-      cmdReceivedBufferIndex++;
-    }
-  }
-  return false;
+    return false;
 }
 
-byte GravityTDS::cmdParse()
-{
-  byte modeIndex = 0;
-  if(strstr(cmdReceivedBuffer, "ENTER") != NULL) 
-      modeIndex = 1;
-  else if(strstr(cmdReceivedBuffer, "EXIT") != NULL) 
-      modeIndex = 3;
-  else if(strstr(cmdReceivedBuffer, "CAL:") != NULL)   
-      modeIndex = 2;
-  return modeIndex;
+void GravityTDS::saveKValue(float kValue) {
+   EEPROM_write(kValueAddress+this->mem_offset, kValue);
 }
 
-void GravityTDS::ecCalibration(byte mode)
-{
-    char *cmdReceivedBufferPtr;
-    static boolean ecCalibrationFinish = 0;
-    static boolean enterCalibrationFlag = 0;
-    float KValueTemp,rawECsolution;
-    switch(mode)
-    {
-      case 0:
-      if(enterCalibrationFlag)
-         Serial.println(F("Command Error"));
-      break;
-      
-      case 1:
-      enterCalibrationFlag = 1;
-      ecCalibrationFinish = 0;
-      Serial.println();
-      Serial.println(F(">>>Enter Calibration Mode<<<"));
-      Serial.println(F(">>>Please put the probe into the standard buffer solution<<<"));
-      Serial.println();
-      break;
-     
-      case 2:
-      cmdReceivedBufferPtr=strstr(cmdReceivedBuffer, "CAL:");
-      cmdReceivedBufferPtr+=strlen("CAL:");
-      rawECsolution = strtod(cmdReceivedBufferPtr,NULL)/(float)(TdsFactor);
-      rawECsolution = rawECsolution*(1.0+0.02*(temperature-25.0));
-      if(enterCalibrationFlag)
-      {
-         // Serial.print("rawECsolution:");
-         // Serial.print(rawECsolution);
-         // Serial.print("  ecvalue:");
-         // Serial.println(ecValue);
-          KValueTemp = rawECsolution/(133.42*voltage*voltage*voltage - 255.86*voltage*voltage + 857.39*voltage);  //calibrate in the  buffer solution, such as 707ppm(1413us/cm)@25^c
-          if((rawECsolution>0) && (rawECsolution<2000) && (KValueTemp>0.25) && (KValueTemp<4.0))
-          {
-              Serial.println();
-              Serial.print(F(">>>Confrim Successful,K:"));
-              Serial.print(KValueTemp);
-              Serial.println(F(", Send EXIT to Save and Exit<<<"));
-              kValue =  KValueTemp;
-              ecCalibrationFinish = 1;
-          }
-          else{
-            Serial.println();
-            Serial.println(F(">>>Confirm Failed,Try Again<<<"));
-            Serial.println();
-            ecCalibrationFinish = 0;
-          }        
-      }
-      break;
-
-        case 3:
-        if(enterCalibrationFlag)
-        {
-            Serial.println();
-            if(ecCalibrationFinish)
-            {
-               EEPROM_write(kValueAddress+this->mem_offset, kValue);
-               Serial.print(F(">>>Calibration Successful,K Value Saved"));
-            }
-            else Serial.print(F(">>>Calibration Failed"));       
-            Serial.println(F(",Exit Calibration Mode<<<"));
-            Serial.println();
-            ecCalibrationFinish = 0;
-            enterCalibrationFlag = 0;
-        }
-        break;
-    }
-}
-
-void GravityTDS::calibrate() {
-    ecCalibration(1);
-}

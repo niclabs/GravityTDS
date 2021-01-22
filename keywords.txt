@@ -14,15 +14,18 @@ GravityTDS	KEYWORD1
 
 begin	KEYWORD2
 update	KEYWORD2
-setPin	KEYWORD2
 setTemperature	KEYWORD2
-setAref	KEYWORD2
-setAdcRange	KEYWORD2
 setKvalueAddress	KEYWORD2
 getKvalue	KEYWORD2
 getTdsValue	KEYWORD2
 getEcValue	KEYWORD2
 
+voltageToEC KEYWORD2
+compensateTemperature KEYWORD2
+calibrate1413 KEYWORD2
+isInRange1413 KEYWORD2
+isInRangeKValue KEYWORD2
+saveKValue KEYWORD2
 #######################################
 # Instances (KEYWORD2)
 #######################################
@@ -31,3 +34,4 @@ getEcValue	KEYWORD2
 #######################################
 # Constants (LITERAL1)
 #######################################
+TdsFactor   LITERAL1
