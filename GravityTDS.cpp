@@ -99,8 +99,8 @@ float GravityTDS::compensateTemperature(float ecValue) {
 
 bool GravityTDS::calibrate1413() {
     // to be called after update(voltage, temperature)
-    float KValueTemp = this->ecValue25/(133.42*voltage*voltage*voltage - 255.86*voltage*voltage + 857.39*voltage);
-    if (isInRange1413(ecValue25) && isInRangeKValue(KValueTemp)) {
+    float KValueTemp = 1413.0*(1.0+0.02*(temperature-25.0))/(133.42*voltage*voltage*voltage - 255.86*voltage*voltage + 857.39*voltage);
+    if (isInRangeKValue(KValueTemp)) {
         saveKValue(KValueTemp);
         return true;
     }
